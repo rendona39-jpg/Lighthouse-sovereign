@@ -2,7 +2,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { checkRateLimit } from '../lib/rateLimiter';
-import { queryWithClaude, sendSMSWithRetry } from '../lib/errorRecovery';
+import { queryWithClaude } from '../lib/errorRecovery';
 import {
   getConversationContext,
   detectAmbiguity,
@@ -14,21 +14,35 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY!
 );
 
+// Epistemic mode classifier
+function classifyEpistemicMode(question: string): 'certified' | 'explore' {
+  const exploreKeywords = ['what if', 'should i', 'should we', 'hypothetical', 'scenario'];
+  const lower = question.toLowerCase();
+  return exploreKeywords.some(k => lower.includes(k)) ? 'explore' : 'certified';
+}
+
 export async function POST(req: Request) {
-  const { from, message } = await req.json();
+  const { userId, message } = await req.json();
 
   try {
     // 1. Rate limit
-    const rateCheck = await checkRateLimit(from, 'query');
+    const rateCheck = await checkRateLimit(userId, 'query');
     if (!rateCheck.allowed) {
-      await sendSMSWithRetry(from, `⚠️ ${rateCheck.reason}`);
-      return new Response('Rate limited', { status: 429 });
+      return new Response(JSON.stringify({
+        error: rateCheck.reason
+      }), {
+        status: 429,
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
 
-    // 2. Get conversation context
-    const context = await getConversationContext(from);
+    // 2. Classify epistemic mode (labeling only)
+    const mode = classifyEpistemicMode(message);
 
-    // 3. Check for ambiguity
+    // 3. Get conversation context
+    const context = await getConversationContext(userId);
+
+    // 4. Check for ambiguity
     const ambiguityCheck = detectAmbiguity(message, context);
     if (ambiguityCheck.isAmbiguous) {
       const clarificationMsg = ambiguityCheck.clarification!;
@@ -36,24 +50,30 @@ export async function POST(req: Request) {
         ? '\n\nOptions:\n' + ambiguityCheck.suggestions.map((s, i) => `${i + 1}. ${s}`).join('\n')
         : '';
 
-      await sendSMSWithRetry(from, clarificationMsg + suggestionText);
-
       // Store clarification request
       await supabase.from('conversation_history').insert([
-        { org_id: from, role: 'user', content: message },
-        { org_id: from, role: 'assistant', content: clarificationMsg + suggestionText }
+        { org_id: userId, role: 'user', content: message },
+        { org_id: userId, role: 'assistant', content: clarificationMsg + suggestionText }
       ]);
 
-      return new Response('OK', { status: 200 });
+      return new Response(JSON.stringify({
+        mode: 'clarification',
+        answer: clarificationMsg + suggestionText,
+        provenance: [],
+        confidence: 1.0,
+        timestamp: new Date().toISOString()
+      }), {
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
 
-    // 4. Build enhanced query with context
+    // 5. Build enhanced query with context
     const enhancedQuery = buildEnhancedPrompt(message, context, null);
 
-    // 5. Fetch relevant data from spine
-    const edgeData = await fetchEdgeData(from);
+    // 6. Fetch relevant data from spine
+    const edgeData = await fetchEdgeData(userId);
 
-    // 6. Build Claude system prompt with boundary enforcement
+    // 7. Build Claude system prompt with boundary enforcement
     const systemPrompt = `You are Lighthouse, a conversational business physics engine.
 
 # WHAT YOU DO
@@ -193,11 +213,11 @@ You do NOT advise. You do NOT predict. You do NOT decide.
 
 Show the physics. Let them pilot the ship.`;
 
-    // 7. Call Claude API (with retry/fallback)
+    // 8. Call Claude API (with retry/fallback)
     const { data: history } = await supabase
       .from('conversation_history')
       .select('role, content')
-      .eq('org_id', from)
+      .eq('org_id', userId)
       .order('created_at', { ascending: false })
       .limit(10);
 
@@ -221,28 +241,50 @@ Show the physics. Let them pilot the ship.`;
       throw new Error('Claude query failed after retries');
     }
 
-    const assistantMessage = claudeResult.data!;
+    const answer = claudeResult.data!;
 
-    // 8. Store conversation
+    // 9. Fetch provenance for cited facts
+    const { data: provenance } = await supabase
+      .from('atomic_fact_spine')
+      .select(`
+        fact_id,
+        provenance_chain (
+          source_hash,
+          document_type
+        )
+      `)
+      .eq('org_id', userId)
+      .limit(5);
+
+    // 10. Store conversation
     await supabase.from('conversation_history').insert([
-      { org_id: from, role: 'user', content: message },
-      { org_id: from, role: 'assistant', content: assistantMessage }
+      { org_id: userId, role: 'user', content: message },
+      { org_id: userId, role: 'assistant', content: answer }
     ]);
 
-    // 9. Send SMS response
-    await sendSMSWithRetry(from, assistantMessage);
-
-    return new Response('OK', { status: 200 });
+    // 11. Return JSON response with epistemic labeling
+    return new Response(JSON.stringify({
+      mode,
+      answer,
+      provenance: (provenance || []).map((p: any) => ({
+        fact_id: p.fact_id,
+        source_hash: p.provenance_chain?.source_hash || '',
+        document_type: p.provenance_chain?.document_type || ''
+      })),
+      confidence: mode === 'certified' ? 1.0 : 0.85,
+      timestamp: new Date().toISOString()
+    }), {
+      headers: { 'Content-Type': 'application/json' }
+    });
 
   } catch (error) {
     console.error('Query error:', error);
-
-    await sendSMSWithRetry(
-      from,
-      '❌ Error processing question. Please try again.'
-    );
-
-    return new Response('Error', { status: 500 });
+    return new Response(JSON.stringify({
+      error: 'Error processing question'
+    }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
   }
 }
 
