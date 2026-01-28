@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+
+// Disable static generation for this page since it uses theme context with browser APIs
+export const dynamic = 'force-dynamic';
 import { Link2, Sun, Moon, Monitor, Bell, Clock, FileDown, Eye, EyeOff, Check } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
 import { useTheme } from '@/contexts/theme-context';
