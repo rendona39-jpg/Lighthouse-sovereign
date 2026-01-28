@@ -4,10 +4,12 @@ import { createClient } from '@supabase/supabase-js';
 
 // Lazy client initialization to avoid build-time env var evaluation
 function getSupabaseClient() {
-  return createClient(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  
+  if (!url || !key) return null;
+  
+  return createClient(url, key);
 }
 
 // Rate limit tiers
@@ -31,6 +33,8 @@ export async function checkRateLimit(
   type: 'upload' | 'query'
 ): Promise<RateLimitResult> {
   const supabase = getSupabaseClient();
+  if (!supabase) return { allowed: true }; // Allow if no Supabase configured
+  
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const thisHour = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours());
@@ -129,6 +133,8 @@ export async function detectSpam(orgId: string): Promise<{
   reason?: string;
 }> {
   const supabase = getSupabaseClient();
+  if (!supabase) return { isSpam: false }; // Allow if no Supabase configured
+  
   // Check for identical messages in short time
   const { data: recentMessages } = await supabase
     .from('conversation_history')
@@ -160,6 +166,8 @@ export async function quarantineSuspiciousActivity(
   metadata: any
 ) {
   const supabase = getSupabaseClient();
+  if (!supabase) return; // Skip if no Supabase configured
+  
   await supabase.from('security_alerts').insert({
     org_id: userId,
     alert_type: 'SUSPICIOUS_ACTIVITY',

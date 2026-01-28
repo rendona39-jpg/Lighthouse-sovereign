@@ -12,10 +12,14 @@ import { createClient } from '@supabase/supabase-js';
 // SERVER-SIDE SUPABASE CLIENT (Lazy initialization to avoid build-time eval)
 // ═══════════════════════════════════════════════════════════════════════════
 function getSupabaseClient() {
-  return createClient(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  
+  if (!url || !key) {
+    return null; // Return null if not configured
+  }
+  
+  return createClient(url, key);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -185,6 +189,36 @@ export async function GET(request: Request) {
     // FETCH from Atomic Fact Spine
     // ═══════════════════════════════════════════════════════════════════════
     const supabase = getSupabaseClient();
+    
+    // If Supabase is not configured, return empty stats (demo mode)
+    if (!supabase) {
+      return NextResponse.json({
+        pulse: [],
+        topDrivers: [],
+        efficiency: {
+          margin: 0,
+          totalRevenue: 0,
+          totalExpenses: 0,
+          factDensity: 0,
+          avgConfidence: 0,
+          physicsCertified: 0,
+          periodRange: 'No data'
+        },
+        expenseLeaks: [],
+        metadata: {
+          timestamp: new Date().toISOString(),
+          org_id: orgId,
+          domain_pattern: 'VOLUME_BASED' as const,
+          hero_category: 'None',
+          category_granularity: 0,
+          avg_ticket_size: 0,
+          revenue_concentration: 0,
+          mutation_ready: false,
+          anchor_used: 'Demo Mode - No Supabase configured'
+        }
+      });
+    }
+    
     const { data: facts, error } = await supabase
       .from('atomic_fact_spine')
       .select('*')
@@ -396,12 +430,12 @@ export async function GET(request: Request) {
 
     console.log(`✓ FINAL TRUTH: Revenue $${totalRevenue.toLocaleString()}, Expenses $${totalExpenses.toLocaleString()}, Margin ${margin.toFixed(1)}%`);
 
-    NextResponse.json(response);
+    return NextResponse.json(response);
 
   } catch (error) {
     console.error('❌ Antigravity Pipe Error:', error);
-    NextResponse.json({ 
+    return NextResponse.json({ 
       error: error instanceof Error ? error.message : 'Unknown error in stats pipeline'
-    });
+    }, { status: 500 });
   }
 }
