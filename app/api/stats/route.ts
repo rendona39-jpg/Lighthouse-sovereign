@@ -1,72 +1,403 @@
-import { NextResponse } from 'next/server';
-import type { LighthouseStats } from '@/lib/types';
+// ════════════════════════════════════════════════════════════════════════════
+// LIGHTHOUSE STATS API - ANCHOR LOGIC EDITION
+// ════════════════════════════════════════════════════════════════════════════
+// Mission: Lock onto single source of truth - 'Total sales Total'
+// Physics: Ignore nested spreadsheet totals, trust the anchor rows
+// ════════════════════════════════════════════════════════════════════════════
 
-// Mock data that simulates the backend response
-const mockStats: LighthouseStats = {
-  pulse: [
-    { period: 'P1', revenue: 68500, expenses: 52000, margin_pct: 24.1, fact_count: 45 },
-    { period: 'P2', revenue: 72300, expenses: 54200, margin_pct: 25.0, fact_count: 48 },
-    { period: 'P3', revenue: 69800, expenses: 53100, margin_pct: 23.9, fact_count: 46 },
-    { period: 'P4', revenue: 75400, expenses: 55800, margin_pct: 26.0, fact_count: 50 },
-    { period: 'P5', revenue: 71200, expenses: 54500, margin_pct: 23.5, fact_count: 47 },
-    { period: 'P6', revenue: 78900, expenses: 57200, margin_pct: 27.5, fact_count: 52 },
-    { period: 'P7', revenue: 82100, expenses: 59800, margin_pct: 27.2, fact_count: 54 },
-    { period: 'P8', revenue: 79500, expenses: 58100, margin_pct: 26.9, fact_count: 53 },
-    { period: 'P9', revenue: 84300, expenses: 61200, margin_pct: 27.4, fact_count: 56 },
-    { period: 'P10', revenue: 86700, expenses: 62500, margin_pct: 27.9, fact_count: 57 },
-    { period: 'P11', revenue: 89200, expenses: 64100, margin_pct: 28.1, fact_count: 59 },
-    { period: 'P12', revenue: 97603, expenses: 69800, margin_pct: 28.5, fact_count: 61 },
-  ],
-  topDrivers: [
-    { name: 'Hot Bagels', value: 277250, pct_total: 32.4, vector_type: 'product' },
-    { name: 'Cold Brew Coffee', value: 162045, pct_total: 18.9, vector_type: 'product' },
-    { name: 'Breakfast Sandwiches', value: 128325, pct_total: 15.0, vector_type: 'product' },
-    { name: 'Fresh Pastries', value: 94105, pct_total: 11.0, vector_type: 'product' },
-    { name: 'Lunch Specials', value: 76995, pct_total: 9.0, vector_type: 'product' },
-    { name: 'Specialty Drinks', value: 59785, pct_total: 7.0, vector_type: 'product' },
-    { name: 'Catering Orders', value: 42755, pct_total: 5.0, vector_type: 'service' },
-    { name: 'Merchandise', value: 14243, pct_total: 1.7, vector_type: 'product' },
-  ],
-  efficiency: {
-    margin: 24.8,
-    totalRevenue: 855503,
-    totalExpenses: 643300,
-    factDensity: 558,
-    avgConfidence: 0.942,
-    physicsCertified: 523,
-    periodRange: 'P1-P12',
-  },
-  expenseLeaks: [
-    { type: 'Food Waste', cost: 28500, pct_burn: 4.4, periods_active: 12 },
-    { type: 'Overtime Labor', cost: 24200, pct_burn: 3.8, periods_active: 8 },
-    { type: 'Utility Overages', cost: 12800, pct_burn: 2.0, periods_active: 6 },
-    { type: 'Supply Chain Premium', cost: 9500, pct_burn: 1.5, periods_active: 4 },
-    { type: 'Equipment Repairs', cost: 7200, pct_burn: 1.1, periods_active: 3 },
-    { type: 'Marketing Inefficiency', cost: 5400, pct_burn: 0.8, periods_active: 5 },
-  ],
-  metadata: {
-    org_id: 'greenwich_bagels',
-    domain_pattern: 'VOLUME_BASED',
-    hero_category: 'Hot Bagels',
-    category_granularity: 8,
-    avg_ticket_size: 14.75,
-    revenue_concentration: 0.324,
-  },
+import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SERVER-SIDE SUPABASE CLIENT
+// ═══════════════════════════════════════════════════════════════════════════
+const supabaseUrl = process.env.SUPABASE_URL!;
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TYPE DEFINITIONS
+// ═══════════════════════════════════════════════════════════════════════════
+
+export interface PulsePeriod {
+  period: string;
+  revenue: number;
+  expenses: number;
+  margin_pct: number;
+  fact_count: number;
+}
+
+export interface TopDriver {
+  name: string;
+  value: number;
+  pct_total: number;
+  vector_type: string;
+}
+
+export interface ExpenseLeak {
+  type: string;
+  cost: number;
+  pct_burn: number;
+  periods_active: number;
+}
+
+export interface EfficiencyMetrics {
+  margin: number;
+  totalRevenue: number;
+  totalExpenses: number;
+  factDensity: number;
+  avgConfidence: number;
+  physicsCertified: number;
+  periodRange: string;
+}
+
+export interface DomainMetadata {
+  timestamp: string;
+  org_id: string;
+  domain_pattern: 'VOLUME_BASED' | 'SERVICE_BASED' | 'HYBRID';
+  hero_category: string;
+  category_granularity: number;
+  avg_ticket_size: number;
+  revenue_concentration: number;
+  mutation_ready: boolean;
+  anchor_used: string;
+}
+
+export interface LighthouseStats {
+  pulse: PulsePeriod[];
+  topDrivers: TopDriver[];
+  efficiency: EfficiencyMetrics;
+  expenseLeaks: ExpenseLeak[];
+  metadata: DomainMetadata;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ANCHOR DETECTION - The Single Source of Truth
+// ═══════════════════════════════════════════════════════════════════════════
+
+const REVENUE_ANCHORS = [
+  'Total sales Total',
+  'Total Sales Total',
+  'Net Sales Total',
+  'Total Revenue'
+];
+
+const EXPENSE_ANCHORS = [
+  'Total Expenses',
+  'Total COGs',
+  'Total Operating Expenses'
+];
+
+const findAnchor = (facts: any[], anchors: string[]): any | null => {
+  for (const anchor of anchors) {
+    const found = facts.find(fact => 
+      fact.triad_map?.category?.trim() === anchor
+    );
+    if (found) {
+      console.log(`🎯 ANCHOR FOUND: "${anchor}" = $${parseFloat(found.magnitude).toLocaleString()}`);
+      return found;
+    }
+  }
+  return null;
 };
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const orgId = searchParams.get('org_id');
+// ═══════════════════════════════════════════════════════════════════════════
+// CONTAINER FILTERS (for detail analysis only)
+// ═══════════════════════════════════════════════════════════════════════════
 
-  if (!orgId) {
-    return NextResponse.json(
-      { error: 'org_id is required' },
-      { status: 400 }
-    );
+const isContainerCategory = (name: string): boolean => {
+  const containers = [
+    'Menus Total',
+    'Menu groups Total',
+    'Total sales Total', // Exclude from detail but use as anchor
+    'Total Sales Total',
+    'Menus',
+    'Menu groups',
+    'Food'
+  ];
+  return containers.some(c => name === c);
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// UNIVERSAL DOMAIN ADAPTER
+// ═══════════════════════════════════════════════════════════════════════════
+
+interface DomainPattern {
+  pattern: 'VOLUME_BASED' | 'SERVICE_BASED' | 'HYBRID';
+  hero_category: string;
+  category_granularity: number;
+  avg_ticket_size: number;
+  revenue_concentration: number;
+}
+
+const analyzeDomainPattern = (
+  topDrivers: TopDriver[],
+  totalRevenue: number
+): DomainPattern => {
+  const uniqueCategories = new Set(topDrivers.map(d => d.name));
+  const categoryCount = uniqueCategories.size;
+  
+  const avgTicketSize = topDrivers.length > 0
+    ? topDrivers.reduce((sum, d) => sum + d.value, 0) / topDrivers.length
+    : 0;
+  
+  const heroRevenue = topDrivers.length > 0 ? topDrivers[0].value : 0;
+  const concentration = totalRevenue > 0 
+    ? (heroRevenue / totalRevenue) * 100 
+    : 0;
+
+  const heroCategory = topDrivers.length > 0 
+    ? topDrivers[0].name 
+    : 'Unknown';
+
+  let pattern: 'VOLUME_BASED' | 'SERVICE_BASED' | 'HYBRID';
+
+  if (categoryCount > 20 || avgTicketSize < 1000) {
+    pattern = 'VOLUME_BASED';
+  } else if (categoryCount < 5 && avgTicketSize > 10000) {
+    pattern = 'SERVICE_BASED';
+  } else {
+    pattern = 'HYBRID';
   }
 
-  // Simulate API latency
-  await new Promise((resolve) => setTimeout(resolve, 200));
+  return {
+    pattern,
+    hero_category: heroCategory,
+    category_granularity: categoryCount,
+    avg_ticket_size: Math.round(avgTicketSize),
+    revenue_concentration: Math.round(concentration * 10) / 10
+  };
+};
 
-  return NextResponse.json(mockStats);
+// ═══════════════════════════════════════════════════════════════════════════
+// MAIN HANDLER
+// ═══════════════════════════════════════════════════════════════════════════
+
+export async function GET(request: Request) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const orgId = searchParams.get('org_id') || 'greenwich_final';
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // FETCH from Atomic Fact Spine
+    // ═══════════════════════════════════════════════════════════════════════
+    const { data: facts, error } = await supabase
+      .from('atomic_fact_spine')
+      .select('*')
+      .eq('org_id', orgId);
+
+    if (error) throw error;
+    if (!facts || facts.length === 0) {
+      throw new Error(`No facts found for org_id: ${orgId}`);
+    }
+
+    console.log(`✓ Fetched ${facts.length} facts for org: ${orgId}`);
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // ANCHOR LOGIC: Find Single Source of Truth
+    // ═══════════════════════════════════════════════════════════════════════
+    
+    const revenueAnchor = findAnchor(facts, REVENUE_ANCHORS);
+    const expenseAnchor = findAnchor(facts, EXPENSE_ANCHORS);
+
+    let totalRevenue: number;
+    let anchorUsed: string;
+
+    if (revenueAnchor) {
+      // USE ANCHOR: Single source of truth
+      totalRevenue = Math.abs(parseFloat(revenueAnchor.magnitude) || 0);
+      anchorUsed = revenueAnchor.triad_map?.category || 'Unknown Anchor';
+      console.log(`🎯 USING REVENUE ANCHOR: "${anchorUsed}" = $${totalRevenue.toLocaleString()}`);
+    } else {
+      // FALLBACK: Sum all POSITIVE facts (excluding containers)
+      totalRevenue = facts
+        .filter(f => f.vector_type === 'POSITIVE')
+        .filter(f => !isContainerCategory(f.triad_map?.category || ''))
+        .reduce((sum, f) => sum + Math.abs(parseFloat(f.magnitude) || 0), 0);
+      anchorUsed = 'Calculated from POSITIVE facts';
+      console.log(`⚠️  No revenue anchor found. Calculated: $${totalRevenue.toLocaleString()}`);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // EXPENSE CALCULATION
+    // ═══════════════════════════════════════════════════════════════════════
+    
+    let totalExpenses: number;
+
+    if (expenseAnchor) {
+      totalExpenses = Math.abs(parseFloat(expenseAnchor.magnitude) || 0);
+      console.log(`🎯 USING EXPENSE ANCHOR: "${expenseAnchor.triad_map?.category}" = $${totalExpenses.toLocaleString()}`);
+    } else {
+      // FALLBACK: Sum all NEGATIVE facts
+      totalExpenses = facts
+        .filter(f => f.vector_type === 'NEGATIVE')
+        .reduce((sum, f) => sum + Math.abs(parseFloat(f.magnitude) || 0), 0);
+      console.log(`⚠️  No expense anchor found. Calculated: $${totalExpenses.toLocaleString()}`);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // DETAIL ANALYSIS: Get atomic facts (excluding containers)
+    // ═══════════════════════════════════════════════════════════════════════
+    const atomicFacts = facts.filter(fact => {
+      const category = fact.triad_map?.category || '';
+      return !isContainerCategory(category);
+    });
+
+    console.log(`✓ Atomic facts for detail analysis: ${atomicFacts.length}`);
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // COMPUTE: 12-Period Pulse
+    // ═══════════════════════════════════════════════════════════════════════
+    const periodMap = new Map<string, { revenue: number; expenses: number; count: number }>();
+
+    atomicFacts.forEach(fact => {
+      const period = fact.temporal_anchor || 'Unknown';
+      const magnitude = Math.abs(parseFloat(fact.magnitude) || 0);
+      
+      if (!periodMap.has(period)) {
+        periodMap.set(period, { revenue: 0, expenses: 0, count: 0 });
+      }
+
+      const entry = periodMap.get(period)!;
+      
+      if (fact.vector_type === 'POSITIVE') {
+        entry.revenue += magnitude;
+      } else {
+        entry.expenses += magnitude;
+      }
+      entry.count++;
+    });
+
+    const pulse: PulsePeriod[] = Array.from(periodMap.entries())
+      .map(([period, data]) => ({
+        period,
+        revenue: Math.round(data.revenue),
+        expenses: Math.round(data.expenses),
+        margin_pct: data.revenue > 0 
+          ? Math.round(((data.revenue - data.expenses) / data.revenue) * 100) 
+          : 0,
+        fact_count: data.count
+      }))
+      .sort((a, b) => a.period.localeCompare(b.period));
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // COMPUTE: Top Revenue Drivers (from detail facts)
+    // ═══════════════════════════════════════════════════════════════════════
+    const revenueByCategory = new Map<string, { total: number; vector_type: string }>();
+
+    atomicFacts
+      .filter(fact => fact.vector_type === 'POSITIVE')
+      .forEach(fact => {
+        const category = fact.triad_map?.category || 'Unknown';
+        const magnitude = Math.abs(parseFloat(fact.magnitude) || 0);
+        const vectorType = fact.vector_type || 'revenue';
+
+        if (!revenueByCategory.has(category)) {
+          revenueByCategory.set(category, { total: 0, vector_type: vectorType });
+        }
+
+        revenueByCategory.get(category)!.total += magnitude;
+      });
+
+    const topDrivers: TopDriver[] = Array.from(revenueByCategory.entries())
+      .map(([name, { total, vector_type }]) => ({
+        name,
+        value: Math.round(total),
+        pct_total: totalRevenue > 0 ? Math.round((total / totalRevenue) * 100) : 0,
+        vector_type
+      }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10);
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // COMPUTE: Expense Leaks
+    // ═══════════════════════════════════════════════════════════════════════
+    const expenseByCategory = new Map<string, { total: number; periods: Set<string> }>();
+
+    atomicFacts
+      .filter(fact => fact.vector_type === 'NEGATIVE')
+      .forEach(fact => {
+        const category = fact.triad_map?.category || 'Unknown';
+        const magnitude = Math.abs(parseFloat(fact.magnitude) || 0);
+        const period = fact.temporal_anchor || 'Unknown';
+
+        if (!expenseByCategory.has(category)) {
+          expenseByCategory.set(category, { total: 0, periods: new Set() });
+        }
+
+        const entry = expenseByCategory.get(category)!;
+        entry.total += magnitude;
+        entry.periods.add(period);
+      });
+
+    const expenseLeaks: ExpenseLeak[] = Array.from(expenseByCategory.entries())
+      .map(([type, { total, periods }]) => ({
+        type,
+        cost: Math.round(total),
+        pct_burn: totalExpenses > 0 ? Math.round((total / totalExpenses) * 100) : 0,
+        periods_active: periods.size
+      }))
+      .sort((a, b) => b.cost - a.cost)
+      .slice(0, 8);
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // COMPUTE: Efficiency Metrics
+    // ═══════════════════════════════════════════════════════════════════════
+    const avgConfidence = atomicFacts.reduce((sum, fact) => 
+      sum + (parseFloat(fact.confidence) || 0), 0) / atomicFacts.length;
+
+    const margin = totalRevenue > 0 
+      ? ((totalRevenue - totalExpenses) / totalRevenue) * 100 
+      : 0;
+
+    const periods = Array.from(new Set(atomicFacts.map(f => f.temporal_anchor))).sort();
+
+    const efficiency: EfficiencyMetrics = {
+      margin: Math.round(margin * 10) / 10,
+      totalRevenue: Math.round(totalRevenue),
+      totalExpenses: Math.round(totalExpenses),
+      factDensity: atomicFacts.length,
+      avgConfidence: Math.round(avgConfidence * 1000) / 1000,
+      physicsCertified: 100,
+      periodRange: periods.length > 0 
+        ? `${periods[0]} → ${periods[periods.length - 1]}`
+        : 'Unknown'
+    };
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // SEMANTIC PATTERN ANALYSIS
+    // ═══════════════════════════════════════════════════════════════════════
+    const domainAnalysis = analyzeDomainPattern(topDrivers, totalRevenue);
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // RESPONSE: The Truth
+    // ═══════════════════════════════════════════════════════════════════════
+    const response: LighthouseStats = {
+      pulse,
+      topDrivers,
+      efficiency,
+      expenseLeaks,
+      metadata: {
+        timestamp: new Date().toISOString(),
+        org_id: orgId,
+        domain_pattern: domainAnalysis.pattern,
+        hero_category: domainAnalysis.hero_category,
+        category_granularity: domainAnalysis.category_granularity,
+        avg_ticket_size: domainAnalysis.avg_ticket_size,
+        revenue_concentration: domainAnalysis.revenue_concentration,
+        mutation_ready: true,
+        anchor_used: anchorUsed
+      }
+    };
+
+    console.log(`✓ FINAL TRUTH: Revenue $${totalRevenue.toLocaleString()}, Expenses $${totalExpenses.toLocaleString()}, Margin ${margin.toFixed(1)}%`);
+
+    NextResponse.json(response);
+
+  } catch (error) {
+    console.error('❌ Antigravity Pipe Error:', error);
+    NextResponse.json({ 
+      error: error instanceof Error ? error.message : 'Unknown error in stats pipeline'
+    });
+  }
 }

@@ -1,206 +1,203 @@
+// app/api/query/route.ts
+// Claude-powered conversational query interface with conversation state
+
 import { NextResponse } from 'next/server';
-import type { QueryResponse } from '@/lib/types';
+import { createClient } from '@supabase/supabase-js';
+import { checkRateLimit } from '@/lib/rateLimiter';
+import { queryWithClaude } from '@/lib/errorRecovery';
+import {
+  getConversationContext,
+  detectAmbiguity,
+  buildEnhancedPrompt
+} from '@/lib/conversationState';
 
-// Simulated AI responses based on query patterns
-function generateResponse(message: string): QueryResponse {
-  const lowerMessage = message.toLowerCase();
-  
-  // Revenue-related queries
-  if (lowerMessage.includes('revenue') || lowerMessage.includes('sales')) {
-    return {
-      mode: 'certified',
-      answer: 'Your total revenue for the period P1-P12 is $855,503. Hot Bagels is your top revenue driver at 32.4% ($277,250), followed by Cold Brew Coffee at 18.9% ($162,045). Revenue has shown a consistent upward trend, with P12 being your strongest period at $97,603.',
-      reasoning: {
-        trace: [
-          { step: 'analyzing', message: 'Parsing revenue metrics from certified facts...' },
-          { step: 'fetching', message: 'Retrieving period-over-period comparisons...' },
-          { step: 'computing', message: 'Calculating driver contributions...' },
-        ],
-      },
-      provenance: [
-        { fact_id: 'f_001', source: 'sales_report_2024.csv', confidence: 0.98 },
-        { fact_id: 'f_002', source: 'pos_transactions.csv', confidence: 0.95 },
-        { fact_id: 'f_003', source: 'daily_summary.csv', confidence: 0.97 },
-      ],
-      chartData: {
-        chartType: 'bar',
-        data: [
-          { period: 'P1', revenue: 68500 },
-          { period: 'P2', revenue: 72300 },
-          { period: 'P3', revenue: 69800 },
-          { period: 'P4', revenue: 75400 },
-          { period: 'P5', revenue: 71200 },
-          { period: 'P6', revenue: 78900 },
-          { period: 'P7', revenue: 82100 },
-          { period: 'P8', revenue: 79500 },
-          { period: 'P9', revenue: 84300 },
-          { period: 'P10', revenue: 86700 },
-          { period: 'P11', revenue: 89200 },
-          { period: 'P12', revenue: 97603 },
-        ],
-        config: {
-          xAxis: 'period',
-          yAxis: 'revenue',
-          title: 'Revenue by Period',
-        },
-      },
-      actions: [
-        { text: 'Show top products', query: 'What are my best selling products?' },
-        { text: 'Compare to expenses', query: 'How do my expenses compare to revenue?' },
-        { text: 'Forecast next period', query: 'What is the revenue forecast for P13?' },
-      ],
-      timestamp: new Date().toISOString(),
-    };
-  }
+const supabase = createClient(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_KEY!
+);
 
-  // Expense-related queries
-  if (lowerMessage.includes('expense') || lowerMessage.includes('cost') || lowerMessage.includes('spending')) {
-    return {
-      mode: 'certified',
-      answer: 'Your total expenses for P1-P12 are $643,300, resulting in a gross margin of 24.8%. The largest expense leaks identified are Food Waste ($28,500, 4.4% of burn) and Overtime Labor ($24,200, 3.8% of burn). Addressing these two areas could improve your margin by up to 2-3 percentage points.',
-      reasoning: {
-        trace: [
-          { step: 'analyzing', message: 'Categorizing expense patterns...' },
-          { step: 'fetching', message: 'Identifying recurring cost centers...' },
-          { step: 'computing', message: 'Calculating burn rate percentages...' },
-        ],
-      },
-      provenance: [
-        { fact_id: 'f_101', source: 'expense_ledger.csv', confidence: 0.96 },
-        { fact_id: 'f_102', source: 'payroll_records.csv', confidence: 0.94 },
-      ],
-      actions: [
-        { text: 'Reduce food waste', query: 'How can I reduce food waste?' },
-        { text: 'Optimize labor', query: 'Show me overtime labor trends' },
-        { text: 'Compare margins', query: 'How does my margin compare to industry?' },
-      ],
-      timestamp: new Date().toISOString(),
-    };
-  }
-
-  // Product-related queries
-  if (lowerMessage.includes('product') || lowerMessage.includes('bagel') || lowerMessage.includes('best selling')) {
-    return {
-      mode: 'certified',
-      answer: 'Your top performing products by revenue contribution are:\n\n1. **Hot Bagels** - $277,250 (32.4%)\n2. **Cold Brew Coffee** - $162,045 (18.9%)\n3. **Breakfast Sandwiches** - $128,325 (15.0%)\n4. **Fresh Pastries** - $94,105 (11.0%)\n5. **Lunch Specials** - $76,995 (9.0%)\n\nHot Bagels alone accounts for nearly a third of your total revenue, making it your hero category.',
-      reasoning: {
-        trace: [
-          { step: 'analyzing', message: 'Ranking products by revenue contribution...' },
-          { step: 'fetching', message: 'Pulling category breakdowns...' },
-        ],
-      },
-      provenance: [
-        { fact_id: 'f_201', source: 'product_sales.csv', confidence: 0.97 },
-        { fact_id: 'f_202', source: 'inventory_movement.csv', confidence: 0.93 },
-      ],
-      chartData: {
-        chartType: 'bar',
-        data: [
-          { name: 'Hot Bagels', value: 277250 },
-          { name: 'Cold Brew', value: 162045 },
-          { name: 'Sandwiches', value: 128325 },
-          { name: 'Pastries', value: 94105 },
-          { name: 'Lunch', value: 76995 },
-        ],
-        config: {
-          xAxis: 'name',
-          yAxis: 'value',
-          title: 'Revenue by Product Category',
-        },
-      },
-      actions: [
-        { text: 'Bagel trends', query: 'Show me Hot Bagels performance over time' },
-        { text: 'Pricing analysis', query: 'What is my average ticket size?' },
-      ],
-      timestamp: new Date().toISOString(),
-    };
-  }
-
-  // Margin-related queries
-  if (lowerMessage.includes('margin') || lowerMessage.includes('profit')) {
-    return {
-      mode: 'certified',
-      answer: 'Your current gross margin is **24.8%** based on certified facts with 94.2% average confidence. This represents $212,203 in gross profit from $855,503 in revenue. Your margin has improved from 24.1% in P1 to 28.5% in P12, showing positive operational efficiency gains.',
-      reasoning: {
-        trace: [
-          { step: 'analyzing', message: 'Computing margin metrics...' },
-          { step: 'fetching', message: 'Tracking margin progression...' },
-        ],
-      },
-      provenance: [
-        { fact_id: 'f_301', source: 'financial_summary.csv', confidence: 0.98 },
-      ],
-      chartData: {
-        chartType: 'line',
-        data: [
-          { period: 'P1', margin: 24.1 },
-          { period: 'P2', margin: 25.0 },
-          { period: 'P3', margin: 23.9 },
-          { period: 'P4', margin: 26.0 },
-          { period: 'P5', margin: 23.5 },
-          { period: 'P6', margin: 27.5 },
-          { period: 'P7', margin: 27.2 },
-          { period: 'P8', margin: 26.9 },
-          { period: 'P9', margin: 27.4 },
-          { period: 'P10', margin: 27.9 },
-          { period: 'P11', margin: 28.1 },
-          { period: 'P12', margin: 28.5 },
-        ],
-        config: {
-          xAxis: 'period',
-          yAxis: 'margin',
-          title: 'Margin Trend (%)',
-        },
-      },
-      actions: [
-        { text: 'Improve margin', query: 'How can I improve my margin?' },
-        { text: 'Industry benchmark', query: 'What is the industry average margin?' },
-      ],
-      timestamp: new Date().toISOString(),
-    };
-  }
-
-  // Default explore response for unmatched queries
-  return {
-    mode: 'explore',
-    answer: `I understand you're asking about "${message}". Based on your business data, I can help you explore insights related to revenue trends, expense analysis, product performance, and operational metrics. Could you provide more specific details about what you'd like to know?`,
-    reasoning: {
-      trace: [
-        { step: 'analyzing', message: 'Processing your question...' },
-        { step: 'generating', message: 'Preparing exploratory response...' },
-      ],
-    },
-    actions: [
-      { text: 'Revenue overview', query: 'What is my total revenue?' },
-      { text: 'Expense breakdown', query: 'Show me my expense breakdown' },
-      { text: 'Top products', query: 'What are my best selling products?' },
-      { text: 'Margin analysis', query: 'What is my profit margin?' },
-    ],
-    timestamp: new Date().toISOString(),
-  };
+// Epistemic mode classifier (labeling only)
+function classifyEpistemicMode(question: string): 'certified' | 'explore' {
+  const exploreKeywords = ['what if', 'should i', 'should we', 'hypothetical', 'scenario'];
+  const lower = question.toLowerCase();
+  return exploreKeywords.some(k => lower.includes(k)) ? 'explore' : 'certified';
 }
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { message } = body;
+    const { userId, message } = body;
 
-    if (!message) {
+    if (!userId || !message) {
       return NextResponse.json(
-        { error: 'message is required' },
+        { error: 'userId and message are required' },
         { status: 400 }
       );
     }
 
-    // Simulate AI processing time
-    await new Promise((resolve) => setTimeout(resolve, 800));
+    // 1. Rate limit
+    const rateCheck = await checkRateLimit(userId, 'query');
+    if (!rateCheck.allowed) {
+      return NextResponse.json(
+        { error: rateCheck.reason },
+        { status: 429 }
+      );
+    }
 
-    const response = generateResponse(message);
-    return NextResponse.json(response);
-  } catch {
+    // 2. Epistemic mode (label only)
+    const mode = classifyEpistemicMode(message);
+
+    // 3. Conversation context
+    const context = await getConversationContext(userId);
+
+    // 4. Ambiguity detection
+    const ambiguityCheck = detectAmbiguity(message, context);
+    if (ambiguityCheck.isAmbiguous) {
+      const clarificationMsg = ambiguityCheck.clarification!;
+      const suggestionText = ambiguityCheck.suggestions
+        ? '\n\nOptions:\n' +
+          ambiguityCheck.suggestions.map((s, i) => `${i + 1}. ${s}`).join('\n')
+        : '';
+
+      await supabase.from('conversation_history').insert([
+        { org_id: userId, role: 'user', content: message },
+        { org_id: userId, role: 'assistant', content: clarificationMsg + suggestionText }
+      ]);
+
+      return NextResponse.json({
+        mode: 'clarification',
+        answer: clarificationMsg + suggestionText,
+        provenance: [],
+        confidence: 1.0,
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    // 5. Enhanced prompt
+    const enhancedQuery = buildEnhancedPrompt(message, context, null);
+
+    // 6. Fetch spine edges
+    const edgeData = await fetchEdgeData(userId);
+
+    // 7. System prompt
+    const systemPrompt = `You are Lighthouse, a conversational business physics engine.
+
+Your mission: Answer questions using only certified atomic facts from the business spine.
+
+## Core Principles
+
+1. **Certified Mode (Default)**
+   - Every statement must trace to certified facts with provenance
+   - Use vector_type (POSITIVE/NEGATIVE), magnitude, temporal_anchor, category
+   - Show confidence scores for all claims
+   - If data is insufficient, say: "I need more data to answer that."
+
+2. **Explore Mode (Triggered by 'what if', 'should I', 'hypothetical')**
+   - Generate insights based on patterns but clearly label as exploratory
+   - Use phrases like "Based on your pattern, one scenario is..."
+   - Always return to certified facts when possible
+
+3. **Conversational State**
+   - Remember prior questions in this session
+   - Use pronouns naturally ("You asked about X earlier...")
+   - Detect ambiguous references ("Which period?" if unspecified)
+
+4. **Response Structure**
+   - Start with direct answer
+   - Show reasoning steps with trace array
+   - Cite specific fact_ids in provenance array
+   - Suggest follow-up questions in actions array
+   - Include chartData when visualizations help
+
+## Available Data
+
+${JSON.stringify(edgeData, null, 2)}
+
+Show the physics. Let them pilot the ship.`;
+
+    // 8. Claude call
+    const { data: history } = await supabase
+      .from('conversation_history')
+      .select('role, content')
+      .eq('org_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    const recentMessages = (history || []).reverse();
+
+    const claudeResult = await queryWithClaude(systemPrompt, [
+      ...recentMessages.map(m => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content
+      })),
+      { role: 'user', content: enhancedQuery }
+    ]);
+
+    if (!claudeResult.success) {
+      throw new Error('Claude query failed after retries');
+    }
+
+    const answer = claudeResult.data!;
+
+    // 9. Provenance
+    const { data: provenance } = await supabase
+      .from('atomic_fact_spine')
+      .select(`
+        fact_id,
+        provenance_chain (
+          source_hash,
+          document_type
+        )
+      `)
+      .eq('org_id', userId)
+      .limit(5);
+
+    // 10. Store conversation
+    await supabase.from('conversation_history').insert([
+      { org_id: userId, role: 'user', content: message },
+      { org_id: userId, role: 'assistant', content: answer }
+    ]);
+
+    // 11. Final response
+    return NextResponse.json({
+      mode,
+      answer,
+      provenance: (provenance || []).map((p: any) => ({
+        fact_id: p.fact_id,
+        source_hash: p.provenance_chain?.source_hash || '',
+        document_type: p.provenance_chain?.document_type || ''
+      })),
+      confidence: mode === 'certified' ? 1.0 : 0.85,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('Query error:', error);
     return NextResponse.json(
-      { error: 'Query processing failed' },
+      { error: 'Error processing question' },
       { status: 500 }
     );
   }
+}
+
+async function fetchEdgeData(orgId: string) {
+  const now = new Date();
+  const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  const [yield_data, food_cost, labor_cost, revenue] = await Promise.all([
+    supabase.from('edge_yield').select('*').eq('org_id', orgId).gte('period', thisMonth.toISOString()).single(),
+    supabase.from('edge_food_cost_pct').select('*').eq('org_id', orgId).gte('period', thisMonth.toISOString()).single(),
+    supabase.from('edge_labor_cost_pct').select('*').eq('org_id', orgId).gte('period', thisMonth.toISOString()).single(),
+    supabase.from('edge_revenue_trend').select('*').eq('org_id', orgId).gte('period', thisMonth.toISOString()).single()
+  ]);
+
+  return {
+    this_month: {
+      yield: yield_data.data?.yield_ratio,
+      food_cost_pct: food_cost.data?.food_cost_pct,
+      labor_cost_pct: labor_cost.data?.labor_cost_pct,
+      revenue: revenue.data?.revenue,
+      prev_month_revenue: revenue.data?.prev_month_revenue
+    }
+  };
 }
