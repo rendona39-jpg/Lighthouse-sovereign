@@ -12,9 +12,9 @@
 ### A. Conservation Laws
 
 #### Inventory Conservation
-```
+\`\`\`
 (Opening Inventory + Purchases) - Closing Inventory = Cost of Goods Sold
-```
+\`\`\`
 
 **RULE:** If this equation doesn't balance within 2% tolerance → Quarantine
 **REASON:** Indicates theft, waste, or data entry error
@@ -33,12 +33,12 @@
 - Record as liability: "Tips Payable"
 
 **Labor Cost Thresholds:**
-```yaml
+\`\`\`yaml
 healthy: <= 35% of Gross Sales
 acceptable: 35-45% of Gross Sales
 warning: 45-50% of Gross Sales (Explore Mode)
 critical: > 50% of Gross Sales (Overstaffing alert)
-```
+\`\`\`
 
 **RULE:** Separate Hourly vs Salary, track Overtime separately
 **REASON:** Overtime is variable cost, salary is fixed
@@ -51,9 +51,9 @@ critical: > 50% of Gross Sales (Overstaffing alert)
 - **Benefits:** Health insurance, 401k matching, workers comp
 
 #### Revenue Leakage Conservation
-```
+\`\`\`
 Gross Sales - (Discounts + Comps + Voids + Refunds) = Net Sales
-```
+\`\`\`
 
 **RULE:** Leakage > 8% of Gross → Explore Mode (Alert: Manager abuse)
 **REASON:** Industry standard leakage is 3-5%
@@ -72,7 +72,7 @@ Gross Sales - (Discounts + Comps + Voids + Refunds) = Net Sales
 
 **Cash In ≠ Revenue**
 
-```yaml
+\`\`\`yaml
 EXCLUDE from Revenue:
   - Owner Deposits: Equity injection (not earned income)
   - Loan Proceeds: Liability (borrowed money, not earned)
@@ -82,11 +82,11 @@ EXCLUDE from Revenue:
 INCLUDE in Revenue:
   - Customer Payments: Cash, credit card, mobile pay
   - Catering Deposits: When service is performed (not when deposit received)
-```
+\`\`\`
 
 **Cash Out ≠ Expense**
 
-```yaml
+\`\`\`yaml
 EXCLUDE from Expense:
   - Owner Draws: Equity distribution (not business cost)
   - Loan Payments (Principal): Liability reduction
@@ -97,7 +97,7 @@ INCLUDE in Expense:
   - Operating Costs: COGS, Labor, Rent, Utilities
   - Loan Payments (Interest): Cost of borrowing
   - Depreciation: Asset write-down over useful life
-```
+\`\`\`
 
 **RULE:** Only operating activity flows to Atomic Fact Spine
 **REASON:** Non-operating flows distort business performance
@@ -106,9 +106,9 @@ INCLUDE in Expense:
 
 ### B. Prime Cost Law
 
-```
+\`\`\`
 Prime Cost = COGS + Labor
-```
+\`\`\`
 
 **Industry Benchmark:**
 - **Healthy:** 60-65% of revenue
@@ -144,7 +144,7 @@ Prime Cost = COGS + Labor
 **Golden Rule:** Cash In ≠ Revenue, Cash Out ≠ Expense
 
 #### Non-Operating Cash Inflows (EXCLUDE from Revenue)
-```yaml
+\`\`\`yaml
 Owner Deposits:
   classification: Equity Injection
   spine_action: Exclude
@@ -164,10 +164,10 @@ Customer Deposits (Catering):
   classification: Deferred Revenue
   spine_action: Exclude (until event date)
   reason: Revenue is earned when service is performed
-```
+\`\`\`
 
 #### Non-Operating Cash Outflows (EXCLUDE from Expense)
-```yaml
+\`\`\`yaml
 Owner Draws:
   classification: Equity Distribution
   spine_action: Exclude
@@ -182,7 +182,7 @@ Equipment Purchase:
   classification: Asset Acquisition
   spine_action: Exclude (depreciation IS an expense)
   reason: Asset provides multi-year benefit
-```
+\`\`\`
 
 ---
 
@@ -190,7 +190,7 @@ Equipment Purchase:
 
 ### A. Certification Rules
 
-```yaml
+\`\`\`yaml
 confidence >= 0.992:
   destination: atomic_fact_spine
   label: "✓ Certified"
@@ -205,7 +205,7 @@ conservation_violation: true
   destination: quarantine_ledger
   override: "FORCE QUARANTINE (even if confidence = 0.999)"
   reason: "Math doesn't balance - physics violation"
-```
+\`\`\`
 
 ### B. Math Override Principle
 
@@ -214,7 +214,7 @@ conservation_violation: true
 **REASON:** Business cannot have negative revenue - data is corrupt
 
 **Example:**
-```
+\`\`\`
 Revenue (POSITIVE): $5,000
 COGS (NEGATIVE): $3,000
 Labor (NEGATIVE): $2,500
@@ -225,13 +225,13 @@ Total NEGATIVE: $6,500
 
 RESULT: Conservation violation → Quarantine entire file
 ALERT: "Business shows $1,500 loss. Review data for errors or missing revenue entries."
-```
+\`\`\`
 
 ### C. Provenance Requirements
 
 Every certified fact MUST contain:
 
-```yaml
+\`\`\`yaml
 source_hash:
   type: SHA-256
   purpose: Cryptographic fingerprint of source file
@@ -257,7 +257,7 @@ confidence:
   type: Float (0.0 - 1.0)
   purpose: "Certainty that this fact is correct"
   use_case: "0.992+ → Certified, <0.992 → Quarantine"
-```
+\`\`\`
 
 **RULE:** No fact without provenance
 **REASON:** Audit trail for legal/tax defense
@@ -271,36 +271,36 @@ confidence:
 **Verification Criteria:**
 
 1. **Column Symmetry (N×2 Pattern)**
-   ```
+   \`\`\`
    Expected: Amount, Metadata, Amount, Metadata, Amount, Metadata...
    Validation: Count(non-empty columns) % 2 = 0
    Example: 12 periods → 24 data columns (excluding category column)
-   ```
+   \`\`\`
 
 2. **Type Consistency**
-   ```
+   \`\`\`
    Odd columns (1,3,5,7...): Numeric (currency amounts)
    Even columns (2,4,6,8...): Numeric or String (percentages, ratios)
    Column 0: String (category names)
-   ```
+   \`\`\`
 
 3. **Period Header Pattern**
-   ```
+   \`\`\`
    Row 1 contains: P1, P2, P3... OR Q1, Q2, Q3, Q4... OR Jan, Feb, Mar...
    Row 2 (optional): Date ranges like "12/30-1/26", "1/27-2/23"
-   ```
+   \`\`\`
 
 4. **Category Coherence**
-   ```
+   \`\`\`
    First column contains F&B semantic terms:
    - Sales, Revenue, Income (POSITIVE indicators)
    - Cost, Expense, Labor, Wages (NEGATIVE indicators)
    - NOT generic strings like "Row1", "Data", "NULL"
-   ```
+   \`\`\`
 
 **Confidence Boost Rules:**
 
-```yaml
+\`\`\`yaml
 standard_pivot:
   detected_source: CUSTOM_MULTI_PERIOD
   gemini_confidence: 0.90 - 0.95
@@ -321,10 +321,10 @@ failed_verification:
   structural_verification: FAIL (< 2 criteria met)
   final_confidence: 0.850 (no boost)
   reasoning: "Gemini detected pivot, but physics disagree - quarantine"
-```
+\`\`\`
 
 **Example - Greenwich P&L:**
-```
+\`\`\`
 Gemini confidence: 0.95 (CUSTOM_MULTI_PERIOD detected)
 Physics verification:
   ✓ Column symmetry: 24 data columns (12 periods × 2)
@@ -334,7 +334,7 @@ Physics verification:
 
 Result: Confidence boosted 0.95 → 0.995
 Destination: atomic_fact_spine (certified)
-```
+\`\`\`
 
 **Why This Works:**
 - Pivot tables are LESS ambiguous than transactional data (fixed structure)
@@ -363,7 +363,7 @@ Destination: atomic_fact_spine (certified)
 
 Define financial tree for auto-rendering dashboards:
 
-```
+\`\`\`
 ROOT: Total Revenue
 ├── POSITIVE Vectors (Revenue Streams)
 │   ├── Food Sales
@@ -427,11 +427,11 @@ ROOT: Total Revenue
     Formula: POSITIVE sum - NEGATIVE sum
     Benchmark: 10-15% of revenue (healthy restaurant)
     Alert: < 5% → "💡 Thin margins. Review cost structure."
-```
+\`\`\`
 
 ### Multi-Location Aggregation Rules
 
-```yaml
+\`\`\`yaml
 single_location:
   org_id: "greenwich_bagels"
   reporting: "Standalone performance"
@@ -454,7 +454,7 @@ multi_location:
   variance_alerts:
     - condition: "food_cost_pct(Location A) - food_cost_pct(Location B) > 0.15"
       message: "💡 Greenwich food cost is 18% higher than Stamford. Investigate supplier contracts or waste procedures."
-```
+\`\`\`
 
 ---
 
@@ -462,7 +462,7 @@ multi_location:
 
 ### A. POSITIVE Vectors (Revenue)
 
-```yaml
+\`\`\`yaml
 revenue_exact_matches:
   - "Net Sales"
   - "Gross Sales"
@@ -480,11 +480,11 @@ revenue_fuzzy_patterns:
   - contains("revenue")
   - contains("collected")
   - contains("income") AND NOT contains("net income")
-```
+\`\`\`
 
 ### B. NEGATIVE Vectors (COGS)
 
-```yaml
+\`\`\`yaml
 cogs_exact_matches:
   - "Food Cost"
   - "COGS"
@@ -499,11 +499,11 @@ cogs_exact_matches:
 cogs_fuzzy_patterns:
   - contains("cost") AND (contains("food") OR contains("goods") OR contains("product"))
   - contains("usage") AND NOT contains("utility")
-```
+\`\`\`
 
 ### C. NEGATIVE Vectors (Labor)
 
-```yaml
+\`\`\`yaml
 labor_exact_matches:
   - "Labor Cost"
   - "Payroll"
@@ -519,11 +519,11 @@ labor_fuzzy_patterns:
   - contains("payroll")
   - contains("wage")
   - contains("staff") AND contains("cost")
-```
+\`\`\`
 
 ### D. Pass-Through Items (EXCLUDE from Revenue)
 
-```yaml
+\`\`\`yaml
 passthrough_exclude:
   Tips:
     reason: "Liability - collected for staff, remitted"
@@ -542,13 +542,13 @@ passthrough_exclude:
     action: "Record as liability, recognize when service performed"
 
 RULE: If header matches passthrough → Do NOT create POSITIVE revenue fact
-```
+\`\`\`
 
 ### E. POS-Specific Mappings
 
 #### TOAST Headers
 
-```yaml
+\`\`\`yaml
 toast_mappings:
   "Net Sales":
     spine_field: magnitude
@@ -595,11 +595,11 @@ toast_mappings:
     category: "waste"
     transform: ABS
     confidence: 0.95
-```
+\`\`\`
 
 #### SQUARE Headers
 
-```yaml
+\`\`\`yaml
 square_mappings:
   "Gross Sales":
     spine_field: magnitude
@@ -628,11 +628,11 @@ square_mappings:
     category: "food_cost"
     transform: ABS
     confidence: 0.99
-```
+\`\`\`
 
 #### R365 (Restaurant365) Headers
 
-```yaml
+\`\`\`yaml
 r365_mappings:
   "Actual Sales":
     spine_field: magnitude
@@ -660,7 +660,7 @@ r365_mappings:
     action: quarantine
     reason: "Variance = Actual - Theoretical (investigate waste/theft)"
     alert: "💡 Food cost variance detected. Compare actual vs theoretical to identify waste or portion control issues."
-```
+\`\`\`
 
 ---
 
@@ -668,7 +668,7 @@ r365_mappings:
 
 ### A. Automatic Quarantine Triggers
 
-```yaml
+\`\`\`yaml
 quarantine_rules:
   conservation_violation:
     condition: "POSITIVE sum < NEGATIVE sum"
@@ -717,11 +717,11 @@ quarantine_rules:
     action: "Quarantine fact"
     reason: "Zero cost/revenue is suspicious"
     severity: WARNING
-```
+\`\`\`
 
 ### B. Explore Mode Triggers (Insights, Not Errors)
 
-```yaml
+\`\`\`yaml
 explore_mode_alerts:
   prime_cost_high:
     condition: "(COGS + Labor) > 0.70 * revenue"
@@ -752,7 +752,7 @@ explore_mode_alerts:
     condition: "(discounts + comps + voids + refunds) > 0.08 * gross_sales"
     message: "💡 Revenue leakage is 10% (target: 3-5%). Review manager authorization logs and discount policies."
     severity: WARNING
-```
+\`\`\`
 
 ---
 
@@ -760,7 +760,7 @@ explore_mode_alerts:
 
 ### A. Outlier Detection
 
-```yaml
+\`\`\`yaml
 outlier_rules:
   magnitude_range:
     condition: "magnitude > (median * 10)"
@@ -797,13 +797,13 @@ outlier_rules:
     action: "Quarantine"
     reason: "Cannot categorize fact for reporting"
     severity: ERROR
-```
+\`\`\`
 
 ### B. Summary Row Detection
 
 **Patterns that indicate summary rows (EXCLUDE from parsing):**
 
-```yaml
+\`\`\`yaml
 summary_patterns:
   - "TOTAL"
   - "GRAND TOTAL"
@@ -820,17 +820,17 @@ detection_logic:
   - "Check if any cell in row contains summary pattern (case-insensitive)"
   - "Typically occurs in last 10% of file (tail sampling catches this)"
   - "If detected, exclude entire row from fact extraction"
-```
+\`\`\`
 
 **REASON:** Summary rows aggregate line items. Including them causes double-counting.
 
 **Example:**
-```csv
+\`\`\`csv
 Date,Item,Amount
 2025-01-01,Bagel Sale,2.50
 2025-01-01,Coffee Sale,3.00
 2025-01-01,DAILY TOTAL,5.50  ← EXCLUDE THIS ROW
-```
+\`\`\`
 
 If "DAILY TOTAL" row is included, revenue would be counted as $11.00 instead of $5.50.
 
@@ -863,7 +863,7 @@ A Pivot Table is a financial report where:
 ### C. Parsing Logic
 
 **Structure Pattern:**
-```
+\`\`\`
 Column 0: Category name
 Column 1: Period 1 Amount
 Column 2: Period 1 Metadata (%, ratio, etc.) → IGNORE
@@ -871,7 +871,7 @@ Column 3: Period 2 Amount
 Column 4: Period 2 Metadata → IGNORE
 Column 5: Period 3 Amount
 ...
-```
+\`\`\`
 
 **Extraction Rules:**
 1. Parse period headers from Row 1 (skip empty columns)
@@ -883,7 +883,7 @@ Column 5: Period 3 Amount
 4. Create ONE fact per period per category
 
 **Example Transformation:**
-```
+\`\`\`
 Input Row:
 "Food Sales,$64,814,98.6%,$51,707,95.5%,$65,769,86.1%"
 
@@ -909,7 +909,7 @@ Fact 3: {
   vector_type: "POSITIVE",
   confidence: 0.999
 }
-```
+\`\`\`
 
 ### D. Special Handling
 
@@ -934,10 +934,10 @@ Fact 3: {
 ### E. Multi-Dimensional Pivots
 
 **Some reports have BOTH periods AND locations:**
-```
+\`\`\`
 Category, Greenwich P1, Greenwich P2, Stamford P1, Stamford P2
 Food Sales, $10k, $12k, $8k, $9k
-```
+\`\`\`
 
 **Parsing:**
 - Detect dimension pattern (Location + Period)
@@ -965,7 +965,7 @@ Food Sales, $10k, $12k, $8k, $9k
 
 ### A. Currency Stripping
 
-```yaml
+\`\`\`yaml
 STRIP_CURRENCY:
   patterns_to_remove:
     - "$"
@@ -979,11 +979,11 @@ STRIP_CURRENCY:
     - "$1,234.56" → 1234.56
     - "USD 999.99" → 999.99
     - "€ 500,00" → 500.00  # Note: European comma decimal
-```
+\`\`\`
 
 ### B. Absolute Value
 
-```yaml
+\`\`\`yaml
 ABS:
   purpose: "Convert negative numbers to positive magnitude"
   use_case: "COGS/Labor costs often exported as negative, but spine stores magnitude as positive with vector_type=NEGATIVE"
@@ -991,22 +991,22 @@ ABS:
   examples:
     - -450.00 → 450.00 (vector_type: NEGATIVE)
     - -1875.00 → 1875.00 (vector_type: NEGATIVE)
-```
+\`\`\`
 
 ### C. Negate
 
-```yaml
+\`\`\`yaml
 NEGATE:
   purpose: "Flip sign (positive → negative, negative → positive)"
   use_case: "Refunds exported as positive but should be NEGATIVE vector"
 
   examples:
     - 100.00 → -100.00 (then ABS → 100.00, vector_type: NEGATIVE)
-```
+\`\`\`
 
 ### D. Date Parsing
 
-```yaml
+\`\`\`yaml
 PARSE_DATE:
   accepted_formats:
     - "YYYY-MM-DD" (ISO 8601)
@@ -1020,7 +1020,7 @@ PARSE_DATE:
     - "Date must be <= TODAY"
     - "Date must be >= (TODAY - 5 years)"
     - "If invalid, quarantine fact"
-```
+\`\`\`
 
 ---
 
@@ -1028,7 +1028,7 @@ PARSE_DATE:
 
 ### A. Deterministic Parsing (CSV)
 
-```yaml
+\`\`\`yaml
 exact_match_confidence: 0.999
   condition: "Column name exactly matches GEMINI.md alias"
   example: "Net Sales" → 0.999
@@ -1044,11 +1044,11 @@ gemini_sniffer_confidence: 0.85 - 0.99
 manual_override: 0.60
   condition: "Human tagged column in quarantine UI"
   note: "Below 0.992, requires second human review"
-```
+\`\`\`
 
 ### B. Azure Vision (PDF/Image)
 
-```yaml
+\`\`\`yaml
 azure_high_confidence: 0.95 - 0.99
   condition: "Azure returns 'High' confidence on extracted text"
 
@@ -1058,7 +1058,7 @@ azure_medium_confidence: 0.85 - 0.95
 azure_low_confidence: < 0.85
   condition: "Azure returns 'Low' confidence or ambiguous field"
   action: "Quarantine for human review"
-```
+\`\`\`
 
 ---
 
@@ -1069,7 +1069,7 @@ azure_low_confidence: < 0.85
 **Problem:** Refunds are revenue reductions, but how to represent?
 
 **Solution:**
-```yaml
+\`\`\`yaml
 refund_mapping:
   vector_type: NEGATIVE
   category: "revenue_leakage"
@@ -1079,14 +1079,14 @@ refund_mapping:
     - Gross Sales: $5,000 (POSITIVE)
     - Refunds: $200 (NEGATIVE, category: revenue_leakage)
     - Net Sales: $4,800 (POSITIVE - NEGATIVE)
-```
+\`\`\`
 
 ### B. Multi-Currency
 
 **Problem:** International operations in EUR, GBP, etc.
 
 **Solution:**
-```yaml
+\`\`\`yaml
 currency_normalization:
   - Detect currency symbol/code
   - Convert to USD using exchange rate on temporal_anchor date
@@ -1098,14 +1098,14 @@ currency_normalization:
     original_magnitude: 450.00
     exchange_rate: 1.11
     temporal_anchor: "2025-01-15"
-```
+\`\`\`
 
 ### C. Multi-Period Files
 
 **Problem:** CSV contains multiple days/months
 
 **Solution:**
-```yaml
+\`\`\`yaml
 temporal_aggregation:
   - Extract temporal_anchor from each row
   - Group facts by temporal_anchor
@@ -1117,7 +1117,7 @@ temporal_aggregation:
     - Row 1: 2025-01-01, Revenue: $1,000
     - Row 2: 2025-01-02, Revenue: $1,200
     - Result: 2 facts (not 1 fact of $2,200)
-```
+\`\`\`
 
 ---
 
@@ -1127,7 +1127,7 @@ temporal_aggregation:
 
 Every fact in `atomic_fact_spine` MUST have:
 
-```yaml
+\`\`\`yaml
 required_provenance:
   provenance_id:
     type: UUID
@@ -1152,13 +1152,13 @@ required_provenance:
   ingest_timestamp:
     type: TIMESTAMP
     purpose: "When file was uploaded"
-```
+\`\`\`
 
 ### B. Fact-Level Metadata
 
 Every fact in `atomic_fact_spine` SHOULD have (in `triad_map` JSONB):
 
-```yaml
+\`\`\`yaml
 optional_metadata:
   source_row: 42
   source_column: "Net Sales"
@@ -1167,7 +1167,7 @@ optional_metadata:
   pos_system: "TOAST"
   original_value: "$1,234.56"
   transform_applied: "STRIP_CURRENCY"
-```
+\`\`\`
 
 ---
 
@@ -1175,7 +1175,7 @@ optional_metadata:
 
 Before going live:
 
-```yaml
+\`\`\`yaml
 data_validation:
   - [ ] Test with TOAST export (Net Sales, Item COGS)
   - [ ] Test with Square export (Gross Sales, Discounts)
@@ -1200,7 +1200,7 @@ performance_validation:
   - [ ] Upload 1,000-row CSV (should complete < 10 seconds)
   - [ ] Upload 10,000-row CSV (should complete < 60 seconds)
   - [ ] Verify Gemini 3 Flash sniffer latency < 5 seconds
-```
+\`\`\`
 
 ---
 
