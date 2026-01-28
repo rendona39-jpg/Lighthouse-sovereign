@@ -2,10 +2,13 @@
 
 import { createClient } from '@supabase/supabase-js';
 
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
+// Lazy client initialization to avoid build-time env var evaluation
+function getSupabaseClient() {
+  return createClient(
+    process.env.SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 interface ConversationContext {
   lastQuery: string;
@@ -19,6 +22,7 @@ interface ConversationContext {
 }
 
 export async function getConversationContext(orgId: string): Promise<ConversationContext | null> {
+  const supabase = getSupabaseClient();
   const { data } = await supabase
     .from('conversation_history')
     .select('role, content, created_at')

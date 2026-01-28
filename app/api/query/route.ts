@@ -11,10 +11,13 @@ import {
   buildEnhancedPrompt
 } from '@/lib/conversationState';
 
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
+// Lazy client initialization to avoid build-time env var evaluation
+function getSupabaseClient() {
+  return createClient(
+    process.env.SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 // Epistemic mode classifier (labeling only)
 function classifyEpistemicMode(question: string): 'certified' | 'explore' {
@@ -34,6 +37,9 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+
+    // Get Supabase client
+    const supabase = getSupabaseClient();
 
     // 1. Rate limit
     const rateCheck = await checkRateLimit(userId, 'query');
@@ -181,6 +187,7 @@ Show the physics. Let them pilot the ship.`;
 }
 
 async function fetchEdgeData(orgId: string) {
+  const supabase = getSupabaseClient();
   const now = new Date();
   const thisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 

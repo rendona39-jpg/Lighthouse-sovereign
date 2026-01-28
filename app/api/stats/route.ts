@@ -9,11 +9,14 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// SERVER-SIDE SUPABASE CLIENT
+// SERVER-SIDE SUPABASE CLIENT (Lazy initialization to avoid build-time eval)
 // ═══════════════════════════════════════════════════════════════════════════
-const supabaseUrl = process.env.SUPABASE_URL!;
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-const supabase = createClient(supabaseUrl, supabaseKey);
+function getSupabaseClient() {
+  return createClient(
+    process.env.SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // TYPE DEFINITIONS
@@ -181,6 +184,7 @@ export async function GET(request: Request) {
     // ═══════════════════════════════════════════════════════════════════════
     // FETCH from Atomic Fact Spine
     // ═══════════════════════════════════════════════════════════════════════
+    const supabase = getSupabaseClient();
     const { data: facts, error } = await supabase
       .from('atomic_fact_spine')
       .select('*')

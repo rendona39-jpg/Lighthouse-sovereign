@@ -17,16 +17,20 @@ import {
 } from '@/lib/rateLimiter';
 import { sniffCSV } from '@/lib/agents/sniffer';
 
-// Initialize clients
-const supabase = createClient(
-  process.env.SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_KEY!
-);
+// Lazy client initialization to avoid build-time env var evaluation
+function getSupabaseClient() {
+  return createClient(
+    process.env.SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+}
 
-const azureClient = new DocumentAnalysisClient(
-  process.env.AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT!,
-  new AzureKeyCredential(process.env.AZURE_DOCUMENT_INTELLIGENCE_KEY!)
-);
+function getAzureClient() {
+  return new DocumentAnalysisClient(
+    process.env.AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT!,
+    new AzureKeyCredential(process.env.AZURE_DOCUMENT_INTELLIGENCE_KEY!)
+  );
+}
 
 // Business document types (domain-agnostic)
 const ALLOWED_DOCUMENT_TYPES = [
@@ -125,6 +129,9 @@ async function processFile(
   userId: string
 ): Promise<IngestResult> {
   console.log('📥 Processing file:', file.name);
+
+  // Get Supabase client
+  const supabase = getSupabaseClient();
 
   // Convert File to ArrayBuffer
   const arrayBuffer = await file.arrayBuffer();
@@ -564,6 +571,7 @@ async function extractWithAzure(
   }
 
   // Path B: PDF/Image → Azure Vision
+  const azureClient = getAzureClient();
   const modelId = mime.includes('pdf') || mime.includes('image')
     ? 'prebuilt-invoice'
     : 'prebuilt-document';
@@ -595,6 +603,7 @@ function checkConservation(facts: ExtractedFact[]): boolean {
 }
 
 async function detectKPIs(userId: string): Promise<string[]> {
+  const supabase = getSupabaseClient();
   const { data } = await supabase
     .from('atomic_fact_spine')
     .select('triad_map')
