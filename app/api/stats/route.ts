@@ -1,30 +1,25 @@
 // ════════════════════════════════════════════════════════════════════════════
 // LIGHTHOUSE STATS API - ANCHOR LOGIC EDITION
 // ════════════════════════════════════════════════════════════════════════════
+// Mission: Lock onto single source of truth - 'Total sales Total'
+// Physics: Ignore nested spreadsheet totals, trust the anchor rows
+// ════════════════════════════════════════════════════════════════════════════
 
 import { NextResponse } from 'next/server';
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js';
 
 // ═══════════════════════════════════════════════════════════════════════════
-// SERVER-SIDE SUPABASE CLIENT (Lazy initialization)
+// SERVER-SIDE SUPABASE CLIENT (Lazy initialization to avoid build-time eval)
 // ═══════════════════════════════════════════════════════════════════════════
-let supabaseInstance: SupabaseClient | null = null;
-
-function getSupabaseClient(): SupabaseClient | null {
+function getSupabaseClient() {
   const url = process.env.SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   
-  // Return null if environment variables are not configured
   if (!url || !key) {
-    console.log('[v0] Supabase not configured - running in demo mode');
-    return null;
+    return null; // Return null if not configured
   }
   
-  if (!supabaseInstance) {
-    supabaseInstance = createClient(url, key);
-  }
-  
-  return supabaseInstance;
+  return createClient(url, key);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -84,39 +79,7 @@ export interface LighthouseStats {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// DEMO MODE RESPONSE
-// ═══════════════════════════════════════════════════════════════════════════
-
-function getDemoResponse(orgId: string): LighthouseStats {
-  return {
-    pulse: [],
-    topDrivers: [],
-    efficiency: {
-      margin: 0,
-      totalRevenue: 0,
-      totalExpenses: 0,
-      factDensity: 0,
-      avgConfidence: 0,
-      physicsCertified: 0,
-      periodRange: 'Demo Mode'
-    },
-    expenseLeaks: [],
-    metadata: {
-      timestamp: new Date().toISOString(),
-      org_id: orgId,
-      domain_pattern: 'VOLUME_BASED',
-      hero_category: 'None',
-      category_granularity: 0,
-      avg_ticket_size: 0,
-      revenue_concentration: 0,
-      mutation_ready: false,
-      anchor_used: 'Demo Mode - Supabase not configured'
-    }
-  };
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// ANCHOR DETECTION
+// ANCHOR DETECTION - The Single Source of Truth
 // ═══════════════════════════════════════════════════════════════════════════
 
 const REVENUE_ANCHORS = [
@@ -138,17 +101,22 @@ const findAnchor = (facts: any[], anchors: string[]): any | null => {
       fact.triad_map?.category?.trim() === anchor
     );
     if (found) {
+      console.log(`🎯 ANCHOR FOUND: "${anchor}" = $${parseFloat(found.magnitude).toLocaleString()}`);
       return found;
     }
   }
   return null;
 };
 
+// ═══════════════════════════════════════════════════════════════════════════
+// CONTAINER FILTERS (for detail analysis only)
+// ═══════════════════════════════════════════════════════════════════════════
+
 const isContainerCategory = (name: string): boolean => {
   const containers = [
     'Menus Total',
     'Menu groups Total',
-    'Total sales Total',
+    'Total sales Total', // Exclude from detail but use as anchor
     'Total Sales Total',
     'Menus',
     'Menu groups',
@@ -158,7 +126,7 @@ const isContainerCategory = (name: string): boolean => {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
-// DOMAIN PATTERN ANALYSIS
+// UNIVERSAL DOMAIN ADAPTER
 // ═══════════════════════════════════════════════════════════════════════════
 
 interface DomainPattern {
@@ -213,18 +181,44 @@ const analyzeDomainPattern = (
 // ═══════════════════════════════════════════════════════════════════════════
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const orgId = searchParams.get('org_id') || 'demo';
-
-  // Check for Supabase configuration FIRST before any database operations
-  const supabase = getSupabaseClient();
-  
-  if (!supabase) {
-    // Return demo response when Supabase is not configured
-    return NextResponse.json(getDemoResponse(orgId));
-  }
-
   try {
+    const { searchParams } = new URL(request.url);
+    const orgId = searchParams.get('org_id') || 'greenwich_final';
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // FETCH from Atomic Fact Spine
+    // ═══════════════════════════════════════════════════════════════════════
+    const supabase = getSupabaseClient();
+    
+    // If Supabase is not configured, return empty stats (demo mode)
+    if (!supabase) {
+      return NextResponse.json({
+        pulse: [],
+        topDrivers: [],
+        efficiency: {
+          margin: 0,
+          totalRevenue: 0,
+          totalExpenses: 0,
+          factDensity: 0,
+          avgConfidence: 0,
+          physicsCertified: 0,
+          periodRange: 'No data'
+        },
+        expenseLeaks: [],
+        metadata: {
+          timestamp: new Date().toISOString(),
+          org_id: orgId,
+          domain_pattern: 'VOLUME_BASED' as const,
+          hero_category: 'None',
+          category_granularity: 0,
+          avg_ticket_size: 0,
+          revenue_concentration: 0,
+          mutation_ready: false,
+          anchor_used: 'Demo Mode - No Supabase configured'
+        }
+      });
+    }
+    
     const { data: facts, error } = await supabase
       .from('atomic_fact_spine')
       .select('*')
@@ -232,10 +226,15 @@ export async function GET(request: Request) {
 
     if (error) throw error;
     if (!facts || facts.length === 0) {
-      return NextResponse.json(getDemoResponse(orgId));
+      throw new Error(`No facts found for org_id: ${orgId}`);
     }
 
-    // Find anchors
+    console.log(`✓ Fetched ${facts.length} facts for org: ${orgId}`);
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // ANCHOR LOGIC: Find Single Source of Truth
+    // ═══════════════════════════════════════════════════════════════════════
+    
     const revenueAnchor = findAnchor(facts, REVENUE_ANCHORS);
     const expenseAnchor = findAnchor(facts, EXPENSE_ANCHORS);
 
@@ -243,33 +242,50 @@ export async function GET(request: Request) {
     let anchorUsed: string;
 
     if (revenueAnchor) {
+      // USE ANCHOR: Single source of truth
       totalRevenue = Math.abs(parseFloat(revenueAnchor.magnitude) || 0);
       anchorUsed = revenueAnchor.triad_map?.category || 'Unknown Anchor';
+      console.log(`🎯 USING REVENUE ANCHOR: "${anchorUsed}" = $${totalRevenue.toLocaleString()}`);
     } else {
+      // FALLBACK: Sum all POSITIVE facts (excluding containers)
       totalRevenue = facts
         .filter(f => f.vector_type === 'POSITIVE')
         .filter(f => !isContainerCategory(f.triad_map?.category || ''))
         .reduce((sum, f) => sum + Math.abs(parseFloat(f.magnitude) || 0), 0);
       anchorUsed = 'Calculated from POSITIVE facts';
+      console.log(`⚠️  No revenue anchor found. Calculated: $${totalRevenue.toLocaleString()}`);
     }
 
+    // ═══════════════════════════════════════════════════════════════════════
+    // EXPENSE CALCULATION
+    // ═══════════════════════════════════════════════════════════════════════
+    
     let totalExpenses: number;
 
     if (expenseAnchor) {
       totalExpenses = Math.abs(parseFloat(expenseAnchor.magnitude) || 0);
+      console.log(`🎯 USING EXPENSE ANCHOR: "${expenseAnchor.triad_map?.category}" = $${totalExpenses.toLocaleString()}`);
     } else {
+      // FALLBACK: Sum all NEGATIVE facts
       totalExpenses = facts
         .filter(f => f.vector_type === 'NEGATIVE')
         .reduce((sum, f) => sum + Math.abs(parseFloat(f.magnitude) || 0), 0);
+      console.log(`⚠️  No expense anchor found. Calculated: $${totalExpenses.toLocaleString()}`);
     }
 
-    // Get atomic facts (excluding containers)
+    // ═══════════════════════════════════════════════════════════════════════
+    // DETAIL ANALYSIS: Get atomic facts (excluding containers)
+    // ═══════════════════════════════════════════════════════════════════════
     const atomicFacts = facts.filter(fact => {
       const category = fact.triad_map?.category || '';
       return !isContainerCategory(category);
     });
 
-    // Compute pulse
+    console.log(`✓ Atomic facts for detail analysis: ${atomicFacts.length}`);
+
+    // ═══════════════════════════════════════════════════════════════════════
+    // COMPUTE: 12-Period Pulse
+    // ═══════════════════════════════════════════════════════════════════════
     const periodMap = new Map<string, { revenue: number; expenses: number; count: number }>();
 
     atomicFacts.forEach(fact => {
@@ -302,7 +318,9 @@ export async function GET(request: Request) {
       }))
       .sort((a, b) => a.period.localeCompare(b.period));
 
-    // Compute top drivers
+    // ═══════════════════════════════════════════════════════════════════════
+    // COMPUTE: Top Revenue Drivers (from detail facts)
+    // ═══════════════════════════════════════════════════════════════════════
     const revenueByCategory = new Map<string, { total: number; vector_type: string }>();
 
     atomicFacts
@@ -329,7 +347,9 @@ export async function GET(request: Request) {
       .sort((a, b) => b.value - a.value)
       .slice(0, 10);
 
-    // Compute expense leaks
+    // ═══════════════════════════════════════════════════════════════════════
+    // COMPUTE: Expense Leaks
+    // ═══════════════════════════════════════════════════════════════════════
     const expenseByCategory = new Map<string, { total: number; periods: Set<string> }>();
 
     atomicFacts
@@ -358,10 +378,11 @@ export async function GET(request: Request) {
       .sort((a, b) => b.cost - a.cost)
       .slice(0, 8);
 
-    // Compute efficiency metrics
-    const avgConfidence = atomicFacts.length > 0 
-      ? atomicFacts.reduce((sum, fact) => sum + (parseFloat(fact.confidence) || 0), 0) / atomicFacts.length
-      : 0;
+    // ═══════════════════════════════════════════════════════════════════════
+    // COMPUTE: Efficiency Metrics
+    // ═══════════════════════════════════════════════════════════════════════
+    const avgConfidence = atomicFacts.reduce((sum, fact) => 
+      sum + (parseFloat(fact.confidence) || 0), 0) / atomicFacts.length;
 
     const margin = totalRevenue > 0 
       ? ((totalRevenue - totalExpenses) / totalRevenue) * 100 
@@ -381,10 +402,14 @@ export async function GET(request: Request) {
         : 'Unknown'
     };
 
-    // Domain analysis
+    // ═══════════════════════════════════════════════════════════════════════
+    // SEMANTIC PATTERN ANALYSIS
+    // ═══════════════════════════════════════════════════════════════════════
     const domainAnalysis = analyzeDomainPattern(topDrivers, totalRevenue);
 
-    // Build response
+    // ═══════════════════════════════════════════════════════════════════════
+    // RESPONSE: The Truth
+    // ═══════════════════════════════════════════════════════════════════════
     const response: LighthouseStats = {
       pulse,
       topDrivers,
@@ -403,12 +428,14 @@ export async function GET(request: Request) {
       }
     };
 
+    console.log(`✓ FINAL TRUTH: Revenue $${totalRevenue.toLocaleString()}, Expenses $${totalExpenses.toLocaleString()}, Margin ${margin.toFixed(1)}%`);
+
     return NextResponse.json(response);
 
   } catch (error) {
-    console.error('Stats API Error:', error);
+    console.error('❌ Antigravity Pipe Error:', error);
     return NextResponse.json({ 
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: error instanceof Error ? error.message : 'Unknown error in stats pipeline'
     }, { status: 500 });
   }
 }
