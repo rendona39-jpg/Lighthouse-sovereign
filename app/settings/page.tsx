@@ -2,18 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-
-// Disable static generation for this page since it uses theme context with browser APIs
-export const dynamic = 'force-dynamic';
-import { Link2, Sun, Moon, Monitor, Bell, Clock, FileDown, Eye, EyeOff, Check } from 'lucide-react';
+import { Link2, Bell, Clock, FileDown, Eye, EyeOff, Check } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
-import { useTheme } from '@/contexts/theme-context';
 import { useLighthouse } from '@/hooks/use-lighthouse';
 import { Sidebar } from '@/components/dashboard/sidebar';
 import { TopBar } from '@/components/dashboard/top-bar';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
+import { ThemeSelector } from '@/components/settings/theme-selector';
 import { cn } from '@/lib/utils';
 
 interface Integration {
@@ -55,7 +52,6 @@ const INTEGRATIONS: Integration[] = [
 export default function SettingsPage() {
   const router = useRouter();
   const { user, isLoading: authLoading, isAuthenticated } = useAuth();
-  const { theme, setTheme } = useTheme();
   const { hasData } = useLighthouse({ orgId: user?.orgId });
   const [integrations, setIntegrations] = useState<Integration[]>(INTEGRATIONS);
   const [showApiKey, setShowApiKey] = useState<string | null>(null);
@@ -193,44 +189,7 @@ export default function SettingsPage() {
                     <p className="text-[15px] font-medium text-foreground">Theme</p>
                     <p className="text-[13px] text-muted-foreground">Dark or light mode</p>
                   </div>
-                  <div className="flex items-center gap-1 p-1 bg-secondary rounded-lg">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className={cn(
-                        'h-8 px-3',
-                        theme === 'dark' && 'bg-background'
-                      )}
-                      onClick={() => setTheme('dark')}
-                    >
-                      <Moon className="h-4 w-4 mr-1" />
-                      Dark
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className={cn(
-                        'h-8 px-3',
-                        theme === 'light' && 'bg-background'
-                      )}
-                      onClick={() => setTheme('light')}
-                    >
-                      <Sun className="h-4 w-4 mr-1" />
-                      Light
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className={cn(
-                        'h-8 px-3',
-                        theme === 'system' && 'bg-background'
-                      )}
-                      onClick={() => setTheme('system')}
-                    >
-                      <Monitor className="h-4 w-4 mr-1" />
-                      System
-                    </Button>
-                  </div>
+                  <ThemeSelector />
                 </div>
 
                 <div className="border-t border-border" />
